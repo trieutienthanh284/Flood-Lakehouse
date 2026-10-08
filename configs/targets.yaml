@@ -1,0 +1,25 @@
+version: "1.0"
+
+rain_exceedance:
+  unit: "mm/hr"
+
+  horizons_min:
+    - 30
+    - 60
+
+  threshold_mm_h: null
+
+  comparison_operator: ">="
+
+  target_fields:
+    30: "target_rain_exceed_30m"
+    60: "target_rain_exceed_60m"
+
+  raw_target_fields:
+    30: "target_max_rate_30m"
+    60: "target_max_rate_60m"
+
+  notes:
+    - "threshold_mm_h chưa được khóa; sẽ được chọn sau khi phân tích phân phối dữ liệu lịch sử."
+    - "Threshold là giả thuyết cấu hình, không phải ngưỡng xác suất ngập."
+    - "Target sử dụng dữ liệu tương lai chỉ để tạo nhãn; không được dùng làm feature tại prediction_time."

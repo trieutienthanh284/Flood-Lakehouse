@@ -1,2 +1,7 @@
-requests==2.34.2
+﻿requests==2.34.2
 python-dotenv==1.2.4
+h3==4.5.0
+geopandas==1.2.0
+h5py==3.16.0
+PyYAML==6.0.3
+shapely==2.1.2
