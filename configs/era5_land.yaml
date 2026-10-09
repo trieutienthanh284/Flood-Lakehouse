@@ -1,0 +1,34 @@
+﻿version: "1.0"
+
+dataset: "reanalysis-era5-land"
+
+role: "historical_weather_context"
+
+temporal:
+  timezone: "UTC"
+  resolution: "1h"
+  request_partition: "1_day"
+
+area:
+  north: 21.1
+  west: 105.7
+  south: 20.9
+  east: 106.0
+  order: "north_west_south_east"
+
+variables:
+  - "2m_temperature"
+  - "2m_dewpoint_temperature"
+  - "10m_u_component_of_wind"
+  - "10m_v_component_of_wind"
+  - "volumetric_soil_water_layer_1"
+  - "volumetric_soil_water_layer_2"
+
+data_format: "grib"
+download_format: "unarchived"
+
+notes:
+  - "IMERG remains the primary historical rainfall source."
+  - "Relative humidity will be derived from 2m temperature and dewpoint in Silver."
+  - "Wind speed and direction will be derived from U/V components in Silver."
+  - "ERA5-Land raw data must not be spatially interpolated to H3 in Bronze."

@@ -5,3 +5,5 @@ geopandas==1.2.0
 h5py==3.16.0
 PyYAML==6.0.3
 shapely==2.1.2
+cdsapi==0.7.7
+eccodes==2.49.0
