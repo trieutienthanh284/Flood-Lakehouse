@@ -1,0 +1,61 @@
+version: "1.0"
+
+dataset: "SRTMGL1.003"
+product_name: "NASA SRTMGL1 V003"
+
+role: "static_elevation_dem"
+
+temporal:
+  type: "static"
+  timezone: "UTC"
+
+spatial:
+  crs: "EPSG:4326"
+  tiling_scheme: "1x1_degree"
+  tile_id_convention: "N/S + latitude(2) + E/W + longitude(3)"
+  tiles:
+    - "N20E105"
+    - "N21E105"
+
+access:
+  provider: "NASA LP DAAC Earthdata Cloud"
+  auth: "EARTHDATA_TOKEN"
+  delivery_container: "zip"
+  inner_data_format: "hgt"
+
+validation:
+  zip:
+    expected_member_count: 1
+    member_name_template: "{tile}.hgt"
+    require_crc_check: true
+
+  hgt:
+    rows: 3601
+    columns: 3601
+    sample_count: 12967201
+    bytes_per_sample: 2
+    expected_uncompressed_bytes: 25934402
+    dtype: "int16"
+    byte_order: "big_endian"
+    nodata_value: -32768
+    nodata_required: false
+    intervals_per_degree: 3600
+    spatial_resolution_arcseconds: 1
+
+bronze:
+  layer: "bronze"
+  domain: "elevation"
+  source: "srtm"
+  root: "data/bronze/elevation/srtm"
+  staging_dir: "data/bronze/elevation/srtm/staging"
+  raw_dir: "data/bronze/elevation/srtm/raw"
+  partition_key: "tile"
+  storage_granularity: "tile"
+  raw_archive_policy: "keep_original_zip"
+  staging_suffix: ".part"
+
+notes:
+  - "SRTM is the primary static DEM source for the project."
+  - "Bronze stores original raw tile archives; no terrain derivatives are computed in Bronze."
+  - "Derived terrain features such as slope, flow accumulation, HAND, and TWI belong to later Silver/feature engineering stages."
+  - "AOI Hanoi core H3 res9 currently intersects exactly 2 tiles: N20E105 and N21E105."
