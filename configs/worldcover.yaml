@@ -1,0 +1,91 @@
+﻿version: "1.0"
+
+dataset: "ESA WorldCover"
+product_name: "ESA WorldCover 10m 2021 v200"
+product_year: 2021
+product_version: "v200"
+layer: "Map"
+
+role: "static_land_cover"
+
+temporal:
+  type: "static"
+  reference_year: 2021
+  timezone: "UTC"
+
+spatial:
+  crs: "EPSG:4326"
+  spatial_resolution_meters: 10
+  pixel_size_degrees: 0.00008333333333333333
+  tile_size_degrees: 3
+  tile_id_convention: "N/S + latitude(2) + E/W + longitude(3)"
+  tile_origin: "lower_left"
+  tiles:
+    - "N18E105"
+    - "N21E105"
+
+access:
+  provider: "ESA WorldCover AWS S3"
+  auth: "none"
+  base_url: "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map"
+  filename_template: "ESA_WorldCover_10m_2021_v200_{tile}_Map.tif"
+
+validation:
+  raster:
+    driver: "GTiff"
+    width: 36000
+    height: 36000
+    band_count: 1
+    dtype: "uint8"
+    nodata_value: 0
+    tiled: true
+    block_width: 1024
+    block_height: 1024
+    compression: "deflate"
+
+  classes:
+    allowed_values:
+      - 0
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50
+      - 60
+      - 70
+      - 80
+      - 90
+      - 95
+      - 100
+
+    labels:
+      0: "NoData"
+      10: "Tree cover"
+      20: "Shrubland"
+      30: "Grassland"
+      40: "Cropland"
+      50: "Built-up"
+      60: "Bare / sparse vegetation"
+      70: "Snow and ice"
+      80: "Permanent water bodies"
+      90: "Herbaceous wetland"
+      95: "Mangroves"
+      100: "Moss and lichen"
+
+bronze:
+  layer: "bronze"
+  domain: "land_cover"
+  source: "worldcover"
+  root: "data/bronze/land_cover/worldcover"
+  staging_dir: "data/bronze/land_cover/worldcover/staging"
+  raw_dir: "data/bronze/land_cover/worldcover/raw"
+  partition_key: "tile"
+  storage_granularity: "tile"
+  raw_artifact_policy: "keep_original_geotiff"
+  staging_suffix: ".part"
+
+notes:
+  - "ESA WorldCover is the primary static land-cover source for the project."
+  - "Bronze stores the original GeoTIFF tile without clipping, reprojection, class conversion, or H3 aggregation."
+  - "Built-up ratio, vegetation fraction, water fraction, and other H3 features belong to Silver or feature engineering."
+  - "AOI Hanoi core H3 res9 intersects exactly 2 WorldCover tiles: N18E105 and N21E105."
