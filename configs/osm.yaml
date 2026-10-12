@@ -1,0 +1,79 @@
+version: "1.0"
+
+dataset: "OpenStreetMap"
+provider: "Geofabrik"
+region: "Vietnam"
+
+role: "near_static_urban_vector"
+
+license:
+  name: "Open Database License"
+  short_name: "ODbL"
+  attribution_required: true
+  attribution_text: "© OpenStreetMap contributors"
+
+snapshot:
+  snapshot_date: "2026-10-12"
+  remote_last_modified: "Mon, 12 Oct 2026 00:55:27 GMT"
+  remote_filename: "vietnam-latest.osm.pbf"
+  bronze_filename: "vietnam-20261012.osm.pbf"
+  expected_content_length: 330311486
+  expected_md5: "b60a6365bffe82cd391e2b6a3bc94e78"
+
+access:
+  auth: "none"
+  pbf_url: "https://download.geofabrik.de/asia/vietnam-latest.osm.pbf"
+  md5_url: "https://download.geofabrik.de/asia/vietnam-latest.osm.pbf.md5"
+
+format:
+  container: "OSM PBF"
+  extension: ".osm.pbf"
+
+semantic_scope:
+  bronze_policy: "keep_full_provider_snapshot"
+
+  downstream_groups:
+    - "roads"
+    - "waterways"
+    - "water_bodies"
+
+  relevant_tags:
+    roads:
+      - "highway"
+
+    waterways:
+      - "waterway"
+
+    water_bodies:
+      - "natural=water"
+      - "water"
+
+spatial:
+  provider_extent: "Vietnam"
+  project_target: "Hanoi core 9 legacy central districts"
+  target_reference: "data/reference/hanoi_core_h3_res9.geojson"
+  target_h3_resolution: 9
+
+bronze:
+  layer: "bronze"
+  domain: "urban_vector"
+  source: "osm"
+  root: "data/bronze/urban_vector/osm"
+  staging_dir: "data/bronze/urban_vector/osm/staging"
+  raw_dir: "data/bronze/urban_vector/osm/raw"
+  partition_key: "snapshot_date"
+  staging_suffix: ".part"
+  raw_artifact_policy: "keep_original_pbf_bytes"
+
+validation:
+  require_non_empty: true
+  require_content_length_match: true
+  require_md5_match: true
+  require_pbf_readable: true
+
+notes:
+  - "Bronze stores the original Vietnam Geofabrik OSM PBF snapshot without clipping or feature extraction."
+  - "The remote vietnam-latest.osm.pbf endpoint is mutable; snapshot metadata is pinned for reproducibility."
+  - "AOI clipping to the Hanoi core 9-district scope belongs to Silver."
+  - "Road density, road class, intersection density, distance to waterway, and distance to river belong to Silver or feature engineering."
+  - "Published or displayed OpenStreetMap-derived data must preserve required attribution."
