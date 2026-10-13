@@ -1,0 +1,129 @@
+version: "1.0"
+
+dataset: "GSMaP NOW"
+provider: "JAXA EORC"
+role: "realtime_rainfall_candidate"
+
+product:
+  name: "GSMaP_NOW Hourly Rain Rate"
+  format: "NetCDF-4"
+  container: "HDF5"
+  product_number: 4
+
+access:
+  protocol: "ftp"
+  auth: "environment"
+  host_env: "GSMAP_FTP_HOST"
+  user_env: "GSMAP_FTP_USER"
+  password_env: "GSMAP_FTP_PASSWORD"
+  latest_directory: "/now/latest"
+  archive_directory_template: "/now/netcdf/{YYYY}/{MM}/{DD}"
+
+temporal:
+  timezone: "UTC"
+  temporal_resolution_minutes: 60
+  update_frequency_minutes: 30
+  latency_hours: 0
+  filename_time_semantics: "start_time"
+  filename_timestamp_format: "%Y%m%d.%H%M"
+
+filename:
+  regex: "^gsmap_now_rain\\.(?P<date>\\d{8})\\.(?P<time>\\d{4})\\.nc$"
+  template: "gsmap_now_rain.{YYYYMMDD}.{HHNN}.nc"
+
+spatial:
+  grid_type: "regular_latitude_longitude"
+  latitude_size: 1800
+  longitude_size: 3600
+  latitude_resolution_degrees: 0.1
+  longitude_resolution_degrees: 0.1
+  latitude_first: -89.95
+  latitude_last: 89.95
+  longitude_first: -179.95
+  longitude_last: 179.95
+  latitude_order: "ascending"
+  longitude_order: "ascending"
+  effective_latitude_min: -60.0
+  effective_latitude_max: 60.0
+
+variables:
+  latitude:
+    dataset_name: "Latitude"
+    dtype: "float32"
+    units: "degrees_north"
+
+  longitude:
+    dataset_name: "Longitude"
+    dtype: "float32"
+    units: "degrees_east"
+
+  time:
+    dataset_name: "Time"
+    dtype: "int32"
+
+  rainfall:
+    dataset_name: "hourlyPrecipRate"
+    long_name: "precip_now"
+    dtype: "float32"
+    units: "mm/h"
+    fill_value: -9999.9
+    missing_sentinel_values:
+      - -4.0
+      - -8.0
+      - -99.0
+
+  rainfall_gauge_calibrated:
+    dataset_name: "hourlyPrecipRateGC"
+    long_name: "precip_gauge_now"
+    dtype: "float32"
+    units: "mm/h"
+    fill_value: -9999.9
+    missing_sentinel_values:
+      - -4.0
+      - -8.0
+      - -99.0
+
+validation:
+  required_root_datasets:
+    - "Time"
+    - "Latitude"
+    - "Longitude"
+    - "hourlyPrecipRate"
+    - "hourlyPrecipRateGC"
+
+  expected_shapes:
+    Time:
+      - 1
+    Latitude:
+      - 1800
+    Longitude:
+      - 3600
+    hourlyPrecipRate:
+      - 1
+      - 1800
+      - 3600
+    hourlyPrecipRateGC:
+      - 1
+      - 1800
+      - 3600
+
+  require_hdf5_signature: true
+  require_filename_timestamp_match_time_units: true
+  require_nonnegative_valid_rainfall: true
+
+bronze:
+  layer: "bronze"
+  domain: "rainfall"
+  source: "gsmap_now"
+  root: "data/bronze/rainfall/gsmap_now"
+  staging_dir: "data/bronze/rainfall/gsmap_now/staging"
+  raw_dir: "data/bronze/rainfall/gsmap_now/raw"
+  partition_key: "event_date"
+  staging_suffix: ".part"
+  raw_artifact_policy: "keep_original_netcdf"
+
+notes:
+  - "Bronze stores the original GSMaP NOW NetCDF artifact without clipping, reprojection, unit conversion, or H3 aggregation."
+  - "Temporal resolution is 1 hour, while product update frequency is 30 minutes."
+  - "Filename timestamp represents the start time of the one-hour rainfall window."
+  - "GSMaP NOW is a realtime candidate and must not directly replace IMERG historical rainfall without distribution and bias checks."
