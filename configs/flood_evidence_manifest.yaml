@@ -1,0 +1,92 @@
+version: "1.0"
+
+manifest:
+  format: "json"
+  encoding: "utf-8"
+  one_manifest_per_artifact: true
+
+identity:
+  evidence_id:
+    required: true
+    type: "string"
+    immutable: true
+
+  evidence_type:
+    required: true
+    type: "string"
+    allowed_values:
+      - "article"
+      - "pdf"
+      - "image"
+
+source:
+  source_name:
+    required: true
+    type: "string"
+
+  source_uri:
+    required: true
+    type: "string"
+
+  title:
+    required: false
+    type: "string"
+
+  author:
+    required: false
+    type: "string"
+
+temporal:
+  published_time:
+    required: false
+    type: "datetime"
+
+  observed_time:
+    required: false
+    type: "datetime"
+
+  ingestion_time:
+    required: true
+    type: "datetime"
+
+  timezone_policy: "store_timezone_aware"
+
+spatial_hint:
+  location_text:
+    required: false
+    type: "string"
+
+artifact:
+  raw_artifact_path:
+    required: true
+    type: "string"
+
+  sha256:
+    required: true
+    type: "string"
+    length: 64
+
+  media_type:
+    required: true
+    type: "string"
+
+  file_bytes:
+    required: true
+    type: "integer"
+    minimum: 1
+
+notes:
+  required: false
+  type: "string"
+
+rules:
+  require_original_artifact: true
+  allow_h3_assignment: false
+  allow_flood_label: false
+  allow_geocoding_result: false
+  allow_text_extraction_result: false
+
+bronze:
+  manifest_directory: "data/bronze/flood_evidence/manifest"
+  raw_directory: "data/bronze/flood_evidence/raw"
+  manifest_filename_template: "{evidence_id}.json"

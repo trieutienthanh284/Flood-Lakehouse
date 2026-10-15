@@ -10,3 +10,4 @@ cdsapi==0.7.7
 eccodes==2.49.0
 rasterio==1.5.2
 pyogrio==0.13.0
+pypdf==6.20.1

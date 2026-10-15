@@ -1,0 +1,93 @@
+version: "1.0"
+
+dataset: "Hanoi Historical Flood Evidence"
+role: "historical_flood_evidence"
+
+evidence:
+  supported_types:
+    - "article"
+    - "pdf"
+    - "image"
+
+  raw_policy:
+    preserve_original: true
+    transform_in_bronze: false
+
+spatial:
+  target_city: "Hanoi"
+  h3_resolution: 9
+  h3_reference: "data/reference/hanoi_core_h3_res9.geojson"
+
+temporal:
+  timezone: "Asia/Bangkok"
+  event_time_required_for_labeling: true
+  ingestion_time_required: true
+
+provenance:
+  required_fields:
+    - "evidence_id"
+    - "evidence_type"
+    - "source_name"
+    - "source_uri"
+    - "ingestion_time"
+    - "raw_artifact_path"
+    - "sha256"
+
+  optional_fields:
+    - "published_time"
+    - "observed_time"
+    - "location_text"
+    - "title"
+    - "author"
+    - "notes"
+
+bronze:
+  layer: "bronze"
+  domain: "flood_evidence"
+  root: "data/bronze/flood_evidence"
+  raw_dir: "data/bronze/flood_evidence/raw"
+  manifest_dir: "data/bronze/flood_evidence/manifest"
+
+labeling:
+  allowed_in_bronze: false
+  target_labels:
+    - "FLOOD"
+    - "NO_FLOOD"
+
+notes:
+  - "Bronze preserves original evidence and provenance only."
+  - "Geocoding, H3 assignment, and flood labeling belong to later processing stages."
+  - "Article, PDF, and image evidence must remain traceable to the original source."
+
+ingestion:
+  mode: "manual_controlled"
+  input_type: "local_file"
+
+  evidence_id:
+    strategy: "evidence_type_sha256_prefix"
+    prefix: "fe"
+    sha256_prefix_length: 16
+
+  idempotency:
+    enabled: true
+    duplicate_policy: "skip_existing"
+
+  staging:
+    enabled: true
+    directory: "data/bronze/flood_evidence/staging"
+
+  promotion:
+    require_validation: true
+    atomic_when_possible: true
+
+  provenance_path_policy:
+    raw_artifact_path: "project_relative_posix"
+
+bronze_layout:
+  partition_keys:
+    - "evidence_type"
+    - "ingestion_date"
+
+  raw_path_template: "evidence_type={evidence_type}/ingestion_date={ingestion_date}/{evidence_id}{suffix}"
+
+  manifest_path_template: "evidence_type={evidence_type}/ingestion_date={ingestion_date}/{evidence_id}.json"
