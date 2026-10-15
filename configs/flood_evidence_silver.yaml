@@ -1,0 +1,155 @@
+version: "1.0"
+
+dataset: "Hanoi Historical Flood Evidence Silver"
+
+role: "structured_flood_evidence"
+
+source:
+  bronze_dataset: "Hanoi Historical Flood Evidence"
+  evidence_id_required: true
+
+record_identity:
+  record_id:
+    required: true
+    type: "string"
+    immutable: true
+    strategy: "content_sha256_prefix"
+    prefix: "fer"
+    sha256_prefix_length: 16
+    canonical_fields:
+      - "evidence_id"
+      - "event_type"
+      - "observed_time_start"
+      - "observed_time_end"
+      - "temporal_text"
+      - "location_text"
+      - "extracted_text"
+      - "evidence_locator"
+
+  evidence_id:
+    required: true
+    type: "string"
+
+event:
+  event_type:
+    required: true
+    type: "string"
+    allowed_values:
+      - "flood_observation"
+      - "rainfall_observation"
+      - "flood_impact"
+      - "context"
+
+temporal:
+  observed_time_start:
+    required: false
+    type: "datetime"
+
+  observed_time_end:
+    required: false
+    type: "datetime"
+
+  temporal_text:
+    required: false
+    type: "string"
+
+  timezone:
+    value: "Asia/Bangkok"
+
+spatial:
+  location_text:
+    required: false
+    type: "string"
+
+  latitude:
+    required: false
+    type: "number"
+
+  longitude:
+    required: false
+    type: "number"
+
+  h3_assignment_allowed:
+    value: false
+
+flood_measurement:
+  flood_depth_m:
+    required: false
+    type: "number"
+
+  flood_depth_text:
+    required: false
+    type: "string"
+
+  rainfall_mm:
+    required: false
+    type: "number"
+
+  rainfall_duration_hours:
+    required: false
+    type: "number"
+
+evidence_text:
+  extracted_text:
+    required: true
+    type: "string"
+
+  evidence_locator:
+    required: false
+    type: "string"
+
+  extraction_method:
+    required: true
+    type: "string"
+    allowed_values:
+      - "manual"
+      - "rule_based"
+      - "automated"
+
+quality:
+  confidence:
+    required: true
+    type: "string"
+    allowed_values:
+      - "high"
+      - "medium"
+      - "low"
+
+  review_status:
+    required: true
+    type: "string"
+    allowed_values:
+      - "pending"
+      - "reviewed"
+      - "rejected"
+
+provenance:
+  preserve_evidence_id: true
+  preserve_raw_traceability: true
+
+rules:
+  allow_gold_flood_label: false
+  allow_h3_assignment: false
+  require_source_traceability: true
+
+storage:
+  root: "data/silver/flood_evidence"
+  records_dir: "data/silver/flood_evidence/records"
+
+  format: "json"
+  encoding: "utf-8"
+
+  layout:
+    partition_keys:
+      - "evidence_id"
+
+    record_path_template: "evidence_id={evidence_id}/{record_id}.json"
+
+  idempotency:
+    enabled: true
+    duplicate_policy: "skip_existing"
+
+notes:
+  - "One Bronze evidence may produce multiple Silver records."
+  - "Silver stores structured facts extracted from evidence."
+  - "H3 assignment and final FLOOD/NO_FLOOD labels belong to later stages."
