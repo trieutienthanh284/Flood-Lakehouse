@@ -1,0 +1,336 @@
+version: "1.0"
+
+dataset: "Hanoi Historical Flood Labels Gold"
+
+role: "historical_flood_label"
+
+source:
+  silver_dataset: "Hanoi Historical Flood Evidence Silver"
+  silver_contract: "configs/flood_evidence_silver.yaml"
+
+  silver_record_id_required: true
+  evidence_id_required: true
+
+  eligible_event_types:
+    - "flood_observation"
+    - "context"
+
+
+scope:
+  name: "hanoi_core_9_districts"
+
+  h3_reference_path:
+    "data/reference/hanoi_core_h3_res9.geojson"
+
+  h3_reference_id_field:
+    "h3_id"
+
+  h3_reference_resolution_field:
+    "h3_resolution"
+
+  h3_reference_district_field:
+    "legacy_district"
+
+  h3_resolution: 9
+
+  require_h3_in_reference: true
+
+
+record_identity:
+  gold_record_id:
+    required: true
+    type: "string"
+    immutable: true
+
+    strategy: "content_sha256_prefix"
+
+    prefix: "feg"
+
+    sha256_prefix_length: 16
+
+    canonical_fields:
+      - "silver_record_id"
+      - "h3_index"
+
+
+traceability:
+  silver_record_id:
+    required: true
+    type: "string"
+
+  evidence_id:
+    required: true
+    type: "string"
+
+  preserve_silver_traceability: true
+  preserve_bronze_traceability: true
+
+
+event:
+  event_type:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "flood_observation"
+      - "context"
+
+
+temporal:
+  event_date_start:
+    required: false
+    type: "date"
+
+  event_date_end:
+    required: false
+    type: "date"
+
+  event_time_start:
+    required: false
+    type: "datetime"
+
+  event_time_end:
+    required: false
+    type: "datetime"
+
+  temporal_text:
+    required: false
+    type: "string"
+
+  temporal_resolution_status:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "resolved"
+      - "partial"
+      - "unresolved"
+
+  timezone:
+    value: "Asia/Bangkok"
+
+
+spatial:
+  location_text:
+    required: false
+    type: "string"
+
+  resolved_location_name:
+    required: false
+    type: "string"
+
+  latitude:
+    required: false
+    type: "number"
+
+  longitude:
+    required: false
+    type: "number"
+
+  h3_index:
+    required: true
+    type: "string"
+
+  h3_resolution:
+    required: true
+    type: "integer"
+    fixed_value: 9
+
+  spatial_resolution_method:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "manual_point"
+      - "geocoded_point"
+      - "reference_lookup"
+      - "geometry_intersection"
+
+  scope_status:
+    required: true
+    type: "string"
+    fixed_value: "in_scope"
+
+
+measurements:
+  flood_depth_m:
+    required: false
+    type: "number"
+
+  flood_depth_text:
+    required: false
+    type: "string"
+
+  inundation_duration_hours:
+    required: false
+    type: "number"
+
+  rainfall_mm:
+    required: false
+    type: "number"
+
+  rainfall_duration_hours:
+    required: false
+    type: "number"
+
+
+label:
+  flood_label:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "FLOOD"
+      - "NO_FLOOD"
+
+  label_basis:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "direct_flood_observation"
+      - "corroborated_flood_evidence"
+      - "verified_no_flood_window"
+
+  label_confidence:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "high"
+      - "medium"
+      - "low"
+
+  label_policy_version:
+    required: true
+    type: "string"
+
+  negative_evidence:
+    verified:
+      required: false
+      type: "boolean"
+
+    verification_note:
+      required: false
+      type: "string"
+
+    required_for_labels:
+      - "NO_FLOOD"
+
+    prohibited_for_labels:
+      - "FLOOD"
+
+  compatibility:
+    FLOOD:
+      eligible_event_types:
+        - "flood_observation"
+
+      allowed_label_basis:
+        - "direct_flood_observation"
+        - "corroborated_flood_evidence"
+
+    NO_FLOOD:
+      eligible_event_types:
+        - "context"
+
+      allowed_label_basis:
+        - "verified_no_flood_window"
+
+      required_review_status:
+        "reviewed"
+
+
+quality:
+  review_status:
+    required: true
+    type: "string"
+
+    allowed_values:
+      - "pending"
+      - "reviewed"
+      - "rejected"
+
+
+rules:
+  require_source_traceability: true
+
+  require_h3_assignment: true
+
+  require_h3_in_reference: true
+
+  rainfall_observation_alone_cannot_imply_flood:
+    true
+
+  absence_of_flood_evidence_is_not_no_flood:
+    true
+
+  no_flood_requires_explicit_negative_evidence:
+    true
+
+  do_not_invent_temporal_precision:
+    true
+
+  do_not_invent_spatial_precision:
+    true
+
+
+storage:
+  root: "data/gold/flood_evidence"
+
+  records_dir:
+    "data/gold/flood_evidence/records"
+
+  format: "json"
+
+  encoding: "utf-8"
+
+  layout:
+    partition_keys:
+      - "h3_index"
+
+    record_path_template:
+      "h3_index={h3_index}/{gold_record_id}.json"
+
+  idempotency:
+    enabled: true
+
+    duplicate_policy:
+      "skip_existing"
+
+    semantic_conflict_policy:
+      "error"
+
+    semantic_conflict_fields:
+      - "evidence_id"
+      - "event_type"
+      - "event_date_start"
+      - "event_date_end"
+      - "event_time_start"
+      - "event_time_end"
+      - "temporal_text"
+      - "temporal_resolution_status"
+      - "location_text"
+      - "resolved_location_name"
+      - "latitude"
+      - "longitude"
+      - "h3_resolution"
+      - "spatial_resolution_method"
+      - "scope_status"
+      - "flood_depth_m"
+      - "flood_depth_text"
+      - "inundation_duration_hours"
+      - "rainfall_mm"
+      - "rainfall_duration_hours"
+      - "flood_label"
+      - "label_basis"
+      - "label_confidence"
+      - "label_policy_version"
+      - "negative_evidence"
+
+
+notes:
+  - "One Silver flood observation may map to one or more H3 cells."
+  - "Gold stores spatially normalized historical flood labels."
+  - "Rainfall observations alone do not create flood labels."
+  - "Absence of flood evidence must not be interpreted as NO_FLOOD."
+  - "Every Gold record must preserve Silver and Bronze traceability."
