@@ -422,6 +422,22 @@ def validate_silver_record(
             "be negative."
         )
 
+    inundation_duration_hours = (
+        validate_optional_number(
+            record,
+            "inundation_duration_hours",
+        )
+    )
+
+    if (
+        inundation_duration_hours is not None
+        and inundation_duration_hours < 0
+    ):
+        raise ValueError(
+            "inundation_duration_hours must "
+            "not be negative."
+        )
+
     rainfall_mm = (
         validate_optional_number(
             record,

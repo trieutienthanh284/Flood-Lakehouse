@@ -1,4 +1,4 @@
-version: "1.0"
+version: "1.1"
 
 dataset: "Hanoi Historical Flood Evidence Silver"
 
@@ -81,6 +81,10 @@ flood_measurement:
     required: false
     type: "string"
 
+  inundation_duration_hours:
+    required: false
+    type: "number"
+
   rainfall_mm:
     required: false
     type: "number"
@@ -148,6 +152,15 @@ storage:
   idempotency:
     enabled: true
     duplicate_policy: "skip_existing"
+    semantic_conflict_policy: "error"
+    semantic_conflict_fields:
+      - "latitude"
+      - "longitude"
+      - "flood_depth_m"
+      - "flood_depth_text"
+      - "inundation_duration_hours"
+      - "rainfall_mm"
+      - "rainfall_duration_hours"
 
 notes:
   - "One Bronze evidence may produce multiple Silver records."

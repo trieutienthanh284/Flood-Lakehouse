@@ -313,6 +313,60 @@ def write_silver_record(
                 "or corrupted existing record."
             )
 
+        idempotency_config = (
+            contract["storage"]["idempotency"]
+        )
+
+        conflict_policy = (
+            idempotency_config.get(
+                "semantic_conflict_policy"
+            )
+        )
+
+        conflict_fields = (
+            idempotency_config.get(
+                "semantic_conflict_fields",
+                [],
+            )
+        )
+
+        semantic_conflicts = {}
+
+        for field in conflict_fields:
+            existing_value = existing.get(
+                field
+            )
+
+            candidate_value = candidate.get(
+                field
+            )
+
+            if existing_value != candidate_value:
+                semantic_conflicts[field] = {
+                    "existing":
+                        existing_value,
+                    "incoming":
+                        candidate_value,
+                }
+
+        if semantic_conflicts:
+            if conflict_policy == "error":
+                raise RuntimeError(
+                    "Silver semantic conflict "
+                    "for existing record: "
+                    + json.dumps(
+                        semantic_conflicts,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                )
+
+            raise RuntimeError(
+                "Unsupported semantic conflict "
+                "policy: "
+                + repr(conflict_policy)
+            )
+
         return {
             "action": "SKIP_EXISTING",
             "record_id": (
