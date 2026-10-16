@@ -146,6 +146,46 @@ spatial:
       - "reference_lookup"
       - "geometry_intersection"
 
+  spatial_reference:
+    required: false
+    type: "object"
+
+    required_for_methods:
+      - "geometry_intersection"
+
+    fields:
+      source:
+        required: true
+        type: "string"
+
+      snapshot_date:
+        required: true
+        type: "date"
+
+      source_path:
+        required: true
+        type: "string"
+
+      layer:
+        required: true
+        type: "string"
+
+      feature_type:
+        required: true
+        type: "string"
+
+      feature_id:
+        required: true
+        type: "string"
+
+      feature_name:
+        required: true
+        type: "string"
+
+      source_crs:
+        required: true
+        type: "string"
+
   scope_status:
     required: true
     type: "string"
@@ -315,6 +355,7 @@ storage:
       - "longitude"
       - "h3_resolution"
       - "spatial_resolution_method"
+      - "spatial_reference"
       - "scope_status"
       - "flood_depth_m"
       - "flood_depth_text"

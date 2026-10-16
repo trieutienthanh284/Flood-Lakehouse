@@ -538,6 +538,112 @@ def validate_gold_record(
             "Invalid spatial_resolution_method."
         )
 
+    spatial_reference_config = contract[
+        "spatial"
+    ][
+        "spatial_reference"
+    ]
+
+    spatial_reference = record.get(
+        "spatial_reference"
+    )
+
+    if (
+        spatial_reference is not None
+        and not isinstance(
+            spatial_reference,
+            dict,
+        )
+    ):
+        raise ValueError(
+            "spatial_reference must be "
+            "an object or null."
+        )
+
+    required_reference_methods = (
+        spatial_reference_config.get(
+            "required_for_methods",
+            [],
+        )
+    )
+
+    reference_required = (
+        spatial_method
+        in required_reference_methods
+    )
+
+    if (
+        reference_required
+        and not isinstance(
+            spatial_reference,
+            dict,
+        )
+    ):
+        raise ValueError(
+            "spatial_reference is required "
+            "for this spatial_resolution_method."
+        )
+
+    if isinstance(
+        spatial_reference,
+        dict,
+    ):
+        reference_fields = (
+            spatial_reference_config[
+                "fields"
+            ]
+        )
+
+        for (
+            reference_field,
+            reference_field_config,
+        ) in reference_fields.items():
+            value = spatial_reference.get(
+                reference_field
+            )
+
+            if (
+                reference_field_config.get(
+                    "required"
+                )
+                is True
+            ):
+                if (
+                    not isinstance(
+                        value,
+                        str,
+                    )
+                    or not value.strip()
+                ):
+                    raise ValueError(
+                        "spatial_reference."
+                        f"{reference_field} "
+                        "must be a non-empty string."
+                    )
+
+        snapshot_date = (
+            spatial_reference.get(
+                "snapshot_date"
+            )
+        )
+
+        if isinstance(
+            snapshot_date,
+            str,
+        ):
+            try:
+                __import__(
+                    "datetime"
+                ).date.fromisoformat(
+                    snapshot_date
+                )
+
+            except ValueError as exc:
+                raise ValueError(
+                    "spatial_reference.snapshot_date "
+                    "must be an ISO date."
+                ) from exc
+
     scope_status = validate_nonempty_string(
         record,
         "scope_status",
