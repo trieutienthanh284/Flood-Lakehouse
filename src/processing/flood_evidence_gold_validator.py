@@ -426,6 +426,81 @@ def validate_gold_record(
             "Invalid temporal_resolution_status."
         )
 
+    temporal_semantics = contract[
+        "temporal"
+    ][
+        "temporal_resolution_status"
+    ].get(
+        "semantics",
+        {},
+    )
+
+    status_semantics = (
+        temporal_semantics.get(
+            temporal_status,
+            {},
+        )
+    )
+
+    if (
+        status_semantics.get(
+            "requires_event_time_start"
+        )
+        is True
+        and event_time_start is None
+    ):
+        raise ValueError(
+            "resolved temporal status requires "
+            "event_time_start."
+        )
+
+    if (
+        status_semantics.get(
+            "requires_event_date_start"
+        )
+        is True
+        and event_date_start is None
+    ):
+        raise ValueError(
+            "partial temporal status requires "
+            "event_date_start."
+        )
+
+    if (
+        status_semantics.get(
+            "prohibits_event_time"
+        )
+        is True
+        and (
+            event_time_start is not None
+            or event_time_end is not None
+        )
+    ):
+        raise ValueError(
+            "partial temporal status prohibits "
+            "event_time_start and event_time_end."
+        )
+
+    if (
+        status_semantics.get(
+            "prohibits_normalized_date_time"
+        )
+        is True
+        and any(
+            value is not None
+            for value in [
+                event_date_start,
+                event_date_end,
+                event_time_start,
+                event_time_end,
+            ]
+        )
+    ):
+        raise ValueError(
+            "unresolved temporal status prohibits "
+            "normalized date/time fields."
+        )
+
     latitude = validate_optional_number(
         record,
         "latitude",

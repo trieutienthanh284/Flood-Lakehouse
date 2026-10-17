@@ -106,6 +106,17 @@ temporal:
       - "partial"
       - "unresolved"
 
+    semantics:
+      resolved:
+        requires_event_time_start: true
+
+      partial:
+        requires_event_date_start: true
+        prohibits_event_time: true
+
+      unresolved:
+        prohibits_normalized_date_time: true
+
   timezone:
     value: "Asia/Bangkok"
 
