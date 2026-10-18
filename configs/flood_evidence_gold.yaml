@@ -302,6 +302,18 @@ quality:
       - "rejected"
 
 
+source_semantic_preservation:
+  policy: "exact_match"
+
+  required_equal_fields:
+    - "temporal_text"
+    - "location_text"
+    - "flood_depth_m"
+    - "flood_depth_text"
+    - "inundation_duration_hours"
+    - "rainfall_mm"
+    - "rainfall_duration_hours"
+
 rules:
   require_source_traceability: true
 

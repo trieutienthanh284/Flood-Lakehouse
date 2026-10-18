@@ -363,6 +363,53 @@ def validate_gold_record(
             "the Silver source record."
         )
 
+    semantic_policy = contract[
+        "source_semantic_preservation"
+    ]
+
+    if (
+        semantic_policy.get(
+            "policy"
+        )
+        != "exact_match"
+    ):
+        raise ValueError(
+            "Unsupported source semantic "
+            "preservation policy."
+        )
+
+    required_equal_fields = (
+        semantic_policy.get(
+            "required_equal_fields",
+            [],
+        )
+    )
+
+    if not isinstance(
+        required_equal_fields,
+        list,
+    ):
+        raise ValueError(
+            "source_semantic_preservation."
+            "required_equal_fields must be a list."
+        )
+
+    for field in required_equal_fields:
+        gold_value = record.get(
+            field
+        )
+
+        silver_value = silver_record.get(
+            field
+        )
+
+        if gold_value != silver_value:
+            raise ValueError(
+                "Gold source semantic field "
+                f"{field} does not match "
+                "the Silver source record."
+            )
+
     event_date_start = parse_optional_date(
         record,
         "event_date_start",
