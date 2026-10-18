@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -126,6 +127,422 @@ def parse_optional_datetime(
         )
 
     return parsed
+
+
+def derive_expected_temporal_from_silver(
+    silver_record: dict[str, Any],
+    contract: dict[str, Any],
+) -> dict[str, Any]:
+    policy = contract[
+        "temporal"
+    ][
+        "derivation_policy"
+    ]
+
+    if (
+        policy.get("policy")
+        != "deterministic_from_silver"
+    ):
+        raise ValueError(
+            "Unsupported temporal derivation policy."
+        )
+
+    if (
+        policy.get(
+            "temporal_text_date_order"
+        )
+        != "DMY"
+    ):
+        raise ValueError(
+            "Unsupported temporal text date order."
+        )
+
+    observed_policy = policy[
+        "observed_timestamp"
+    ]
+
+    parsed_policy = policy[
+        "parsed_temporal_text"
+    ]
+
+    no_source_policy = policy[
+        "no_temporal_source"
+    ]
+
+    observed_start_raw = silver_record.get(
+        "observed_time_start"
+    )
+
+    observed_end_raw = silver_record.get(
+        "observed_time_end"
+    )
+
+    temporal_text = silver_record.get(
+        "temporal_text"
+    )
+
+    if (
+        observed_end_raw is not None
+        and observed_start_raw is None
+        and observed_policy.get(
+            "observed_time_end_requires_observed_time_start"
+        )
+        is True
+    ):
+        raise ValueError(
+            "Silver observed_time_end requires "
+            "observed_time_start."
+        )
+
+    if observed_start_raw is not None:
+        if not isinstance(
+            observed_start_raw,
+            str,
+        ):
+            raise ValueError(
+                "Silver observed_time_start must "
+                "be an ISO datetime string."
+            )
+
+        try:
+            observed_start = (
+                datetime.fromisoformat(
+                    observed_start_raw
+                )
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Silver observed_time_start must "
+                "be a valid ISO datetime."
+            ) from exc
+
+        if (
+            observed_start.tzinfo is None
+            or observed_start.utcoffset()
+            is None
+        ):
+            raise ValueError(
+                "Silver observed_time_start must "
+                "be timezone-aware."
+            )
+
+        observed_end = None
+
+        if observed_end_raw is not None:
+            if not isinstance(
+                observed_end_raw,
+                str,
+            ):
+                raise ValueError(
+                    "Silver observed_time_end must "
+                    "be an ISO datetime string."
+                )
+
+            try:
+                observed_end = (
+                    datetime.fromisoformat(
+                        observed_end_raw
+                    )
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "Silver observed_time_end must "
+                    "be a valid ISO datetime."
+                ) from exc
+
+            if (
+                observed_end.tzinfo is None
+                or observed_end.utcoffset()
+                is None
+            ):
+                raise ValueError(
+                    "Silver observed_time_end must "
+                    "be timezone-aware."
+                )
+
+            if (
+                observed_end
+                < observed_start
+            ):
+                raise ValueError(
+                    "Silver observed_time_end must "
+                    "not precede observed_time_start."
+                )
+
+        return {
+            "derivation_class":
+                "observed_timestamp",
+
+            "temporal_resolution_status":
+                observed_policy[
+                    "required_resolution_status"
+                ],
+
+            "event_date_start":
+                observed_start.date(),
+
+            "event_date_end":
+                (
+                    observed_end.date()
+                    if observed_end is not None
+                    else observed_start.date()
+                ),
+
+            "event_time_start":
+                observed_start,
+
+            "event_time_end":
+                observed_end,
+        }
+
+    if temporal_text is None:
+        return {
+            "derivation_class":
+                "no_temporal_source",
+
+            "temporal_resolution_status":
+                no_source_policy[
+                    "required_resolution_status"
+                ],
+
+            "event_date_start":
+                None,
+
+            "event_date_end":
+                None,
+
+            "event_time_start":
+                None,
+
+            "event_time_end":
+                None,
+        }
+
+    if (
+        not isinstance(
+            temporal_text,
+            str,
+        )
+        or not temporal_text.strip()
+    ):
+        raise ValueError(
+            "Silver temporal_text must be "
+            "a non-empty string or null."
+        )
+
+    single_date_pattern = re.compile(
+        r"^\s*"
+        r"(\d{1,2})/"
+        r"(\d{1,2})/"
+        r"(\d{4})"
+        r"\s*$"
+    )
+
+    same_month_range_pattern = re.compile(
+        r"^\s*"
+        r"(\d{1,2})-"
+        r"(\d{1,2})/"
+        r"(\d{1,2})/"
+        r"(\d{4})"
+        r"\s*$"
+    )
+
+    cross_month_range_pattern = re.compile(
+        r"^\s*"
+        r"(\d{1,2})/"
+        r"(\d{1,2})-"
+        r"(\d{1,2})/"
+        r"(\d{1,2})/"
+        r"(\d{4})"
+        r"\s*$"
+    )
+
+    embedded_date_pattern = re.compile(
+        r"(?<!\d)"
+        r"(\d{1,2})/"
+        r"(\d{1,2})/"
+        r"(\d{4})"
+        r"(?!\d)"
+    )
+
+    def make_date(
+        year: str,
+        month: str,
+        day: str,
+    ) -> date:
+        try:
+            return date(
+                int(year),
+                int(month),
+                int(day),
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Silver temporal_text contains "
+                "an invalid calendar date."
+            ) from exc
+
+    derivation_class = None
+    start_date = None
+    end_date = None
+
+    match = cross_month_range_pattern.fullmatch(
+        temporal_text
+    )
+
+    if match:
+        (
+            start_day,
+            start_month,
+            end_day,
+            end_month,
+            year,
+        ) = match.groups()
+
+        derivation_class = (
+            "cross_month_date_range"
+        )
+
+        start_date = make_date(
+            year,
+            start_month,
+            start_day,
+        )
+
+        end_date = make_date(
+            year,
+            end_month,
+            end_day,
+        )
+
+    if derivation_class is None:
+        match = (
+            same_month_range_pattern.fullmatch(
+                temporal_text
+            )
+        )
+
+        if match:
+            (
+                start_day,
+                end_day,
+                month,
+                year,
+            ) = match.groups()
+
+            derivation_class = (
+                "same_month_date_range"
+            )
+
+            start_date = make_date(
+                year,
+                month,
+                start_day,
+            )
+
+            end_date = make_date(
+                year,
+                month,
+                end_day,
+            )
+
+    if derivation_class is None:
+        match = single_date_pattern.fullmatch(
+            temporal_text
+        )
+
+        if match:
+            (
+                day,
+                month,
+                year,
+            ) = match.groups()
+
+            derivation_class = (
+                "single_date"
+            )
+
+            start_date = make_date(
+                year,
+                month,
+                day,
+            )
+
+            end_date = start_date
+
+    if derivation_class is None:
+        match = embedded_date_pattern.search(
+            temporal_text
+        )
+
+        if match:
+            (
+                day,
+                month,
+                year,
+            ) = match.groups()
+
+            derivation_class = (
+                "date_embedded_in_text"
+            )
+
+            start_date = make_date(
+                year,
+                month,
+                day,
+            )
+
+            end_date = start_date
+
+    supported_shapes = set(
+        parsed_policy.get(
+            "supported_shapes",
+            [],
+        )
+    )
+
+    if (
+        derivation_class is None
+        or derivation_class
+        not in supported_shapes
+    ):
+        raise ValueError(
+            "Unsupported Silver temporal_text "
+            "shape for deterministic Gold "
+            "temporal derivation."
+        )
+
+    if (
+        start_date is not None
+        and end_date is not None
+        and end_date < start_date
+    ):
+        raise ValueError(
+            "Derived temporal date interval "
+            "is reversed."
+        )
+
+    return {
+        "derivation_class":
+            derivation_class,
+
+        "temporal_resolution_status":
+            parsed_policy[
+                "required_resolution_status"
+            ],
+
+        "event_date_start":
+            start_date,
+
+        "event_date_end":
+            end_date,
+
+        "event_time_start":
+            None,
+
+        "event_time_end":
+            None,
+    }
 
 
 def validate_optional_number(
@@ -547,6 +964,70 @@ def validate_gold_record(
             "unresolved temporal status prohibits "
             "normalized date/time fields."
         )
+
+    expected_temporal = (
+        derive_expected_temporal_from_silver(
+            silver_record,
+            contract,
+        )
+    )
+
+    expected_temporal_status = (
+        expected_temporal[
+            "temporal_resolution_status"
+        ]
+    )
+
+    if (
+        temporal_status
+        != expected_temporal_status
+    ):
+        raise ValueError(
+            "Gold temporal_resolution_status "
+            "does not match deterministic "
+            "Silver temporal derivation."
+        )
+
+    derived_temporal_fields = {
+        "event_date_start": (
+            event_date_start,
+            expected_temporal[
+                "event_date_start"
+            ],
+        ),
+        "event_date_end": (
+            event_date_end,
+            expected_temporal[
+                "event_date_end"
+            ],
+        ),
+        "event_time_start": (
+            event_time_start,
+            expected_temporal[
+                "event_time_start"
+            ],
+        ),
+        "event_time_end": (
+            event_time_end,
+            expected_temporal[
+                "event_time_end"
+            ],
+        ),
+    }
+
+    for (
+        field,
+        (
+            gold_value,
+            expected_value,
+        ),
+    ) in derived_temporal_fields.items():
+        if gold_value != expected_value:
+            raise ValueError(
+                "Gold derived temporal field "
+                f"{field} does not match "
+                "deterministic Silver derivation."
+            )
 
     latitude = validate_optional_number(
         record,

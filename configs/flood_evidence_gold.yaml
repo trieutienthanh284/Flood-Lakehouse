@@ -120,6 +120,59 @@ temporal:
   timezone:
     value: "Asia/Bangkok"
 
+  derivation_policy:
+    policy: "deterministic_from_silver"
+
+    source_precedence:
+      - "observed_time_start"
+      - "temporal_text"
+      - "no_temporal_source"
+
+    temporal_text_date_order:
+      "DMY"
+
+    observed_timestamp:
+      required_resolution_status:
+        "resolved"
+
+      observed_time_end_requires_observed_time_start:
+        true
+
+      event_time_start_equals_observed_time_start:
+        true
+
+      event_time_end_equals_observed_time_end:
+        true
+
+      event_date_start_from_observed_time_start:
+        true
+
+      event_date_end_from_observed_time_end_or_start:
+        true
+
+    parsed_temporal_text:
+      required_resolution_status:
+        "partial"
+
+      supported_shapes:
+        - "single_date"
+        - "same_month_date_range"
+        - "cross_month_date_range"
+        - "date_embedded_in_text"
+
+      prohibit_event_time:
+        true
+
+      require_exact_parsed_date_interval:
+        true
+
+    no_temporal_source:
+      required_resolution_status:
+        "unresolved"
+
+      prohibit_normalized_date_time:
+        true
+
 
 spatial:
   location_text:
