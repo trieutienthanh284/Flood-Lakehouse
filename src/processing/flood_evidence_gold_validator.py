@@ -1,14 +1,19 @@
 ﻿from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import geopandas as gpd
 import h3
+import pyogrio
 import yaml
+from shapely.geometry import Polygon
 
 
 PROJECT_ROOT = Path(
@@ -19,6 +24,13 @@ DEFAULT_CONTRACT_PATH = (
     PROJECT_ROOT
     / "configs"
     / "flood_evidence_gold.yaml"
+)
+
+
+DEFAULT_SPATIAL_CACHE_CONFIG_PATH = (
+    PROJECT_ROOT
+    / "configs"
+    / "osm_spatial_reference_cache.yaml"
 )
 
 
@@ -48,6 +60,933 @@ def resolve_project_path(
         return path
 
     return PROJECT_ROOT / path
+
+
+def sha256_file(
+    path: Path,
+    chunk_size: int = 8 * 1024 * 1024,
+) -> str:
+    digest = hashlib.sha256()
+
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(
+                chunk_size
+            )
+
+            if not chunk:
+                break
+
+            digest.update(
+                chunk
+            )
+
+    return digest.hexdigest().upper()
+
+
+def load_spatial_cache_config(
+    path: Path = DEFAULT_SPATIAL_CACHE_CONFIG_PATH,
+) -> dict[str, Any]:
+    data = yaml.safe_load(
+        path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    if not isinstance(
+        data,
+        dict,
+    ):
+        raise ValueError(
+            "Spatial cache config must "
+            "be an object."
+        )
+
+    return data
+
+
+def derive_spatial_cache_paths(
+    config: dict[str, Any],
+) -> tuple[Path, Path]:
+    cache_config = config[
+        "cache"
+    ]
+
+    relative_root = Path(
+        cache_config[
+            "root"
+        ]
+    )
+
+    relative_output_dir = (
+        relative_root
+        / cache_config[
+            "snapshot_partition"
+        ]
+    )
+
+    relative_cache_path = (
+        relative_output_dir
+        / cache_config[
+            "file_name"
+        ]
+    )
+
+    relative_manifest_path = (
+        relative_output_dir
+        / config[
+            "lineage"
+        ][
+            "manifest_file_name"
+        ]
+    )
+
+    return (
+        resolve_project_path(
+            relative_cache_path.as_posix()
+        ),
+        resolve_project_path(
+            relative_manifest_path.as_posix()
+        ),
+    )
+
+
+@lru_cache(maxsize=4)
+def load_verified_spatial_cache_context(
+    config_path: Path = DEFAULT_SPATIAL_CACHE_CONFIG_PATH,
+) -> dict[str, Any]:
+    config = load_spatial_cache_config(
+        config_path
+    )
+
+    source_config = config[
+        "source"
+    ]
+
+    scope_config = config[
+        "scope"
+    ]
+
+    cache_config = config[
+        "cache"
+    ]
+
+    lineage_config = config[
+        "lineage"
+    ]
+
+
+    source_path = resolve_project_path(
+        source_config[
+            "path"
+        ]
+    )
+
+    h3_reference_path = resolve_project_path(
+        scope_config[
+            "h3_reference_path"
+        ]
+    )
+
+    cache_path, manifest_path = (
+        derive_spatial_cache_paths(
+            config
+        )
+    )
+
+
+    for required_path in [
+        source_path,
+        h3_reference_path,
+        cache_path,
+        manifest_path,
+    ]:
+        if not required_path.exists():
+            raise FileNotFoundError(
+                "Required spatial cache "
+                f"artifact is missing: "
+                f"{required_path}"
+            )
+
+
+    manifest = json.loads(
+        manifest_path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    if not isinstance(
+        manifest,
+        dict,
+    ):
+        raise ValueError(
+            "Spatial cache manifest must "
+            "be an object."
+        )
+
+
+    manifest_source = manifest[
+        "source"
+    ]
+
+    manifest_scope = manifest[
+        "scope"
+    ]
+
+    manifest_cache = manifest[
+        "cache"
+    ]
+
+
+    expected_source_sha256 = (
+        source_config.get(
+            "expected_sha256"
+        )
+    )
+
+    expected_h3_sha256 = (
+        scope_config.get(
+            "expected_sha256"
+        )
+    )
+
+
+    if not isinstance(
+        expected_source_sha256,
+        str,
+    ):
+        raise ValueError(
+            "Spatial cache source trust "
+            "anchor is missing."
+        )
+
+
+    if not isinstance(
+        expected_h3_sha256,
+        str,
+    ):
+        raise ValueError(
+            "Spatial cache H3 trust "
+            "anchor is missing."
+        )
+
+
+    if (
+        lineage_config.get(
+            "require_live_hash_verification"
+        )
+        is True
+    ):
+        if (
+            sha256_file(
+                source_path
+            )
+            != expected_source_sha256.upper()
+        ):
+            raise ValueError(
+                "Live OSM source SHA-256 "
+                "does not match the spatial "
+                "cache trust anchor."
+            )
+
+        if (
+            sha256_file(
+                h3_reference_path
+            )
+            != expected_h3_sha256.upper()
+        ):
+            raise ValueError(
+                "Live H3 reference SHA-256 "
+                "does not match the spatial "
+                "cache trust anchor."
+            )
+
+
+    source_checks = {
+        "provider":
+            source_config[
+                "provider"
+            ],
+
+        "snapshot_date":
+            source_config[
+                "snapshot_date"
+            ],
+
+        "path":
+            source_config[
+                "path"
+            ],
+
+        "layer":
+            source_config[
+                "layer"
+            ],
+
+        "feature_type":
+            source_config[
+                "feature_type"
+            ],
+
+        "id_field":
+            source_config[
+                "id_field"
+            ],
+
+        "source_crs":
+            source_config[
+                "source_crs"
+            ],
+
+        "sha256":
+            expected_source_sha256,
+    }
+
+
+    for field, expected_value in (
+        source_checks.items()
+    ):
+        if (
+            manifest_source.get(
+                field
+            )
+            != expected_value
+        ):
+            raise ValueError(
+                "Spatial cache manifest "
+                f"source.{field} does not "
+                "match the cache config."
+            )
+
+
+    scope_checks = {
+        "h3_reference_path":
+            scope_config[
+                "h3_reference_path"
+            ],
+
+        "h3_resolution":
+            scope_config[
+                "h3_resolution"
+            ],
+
+        "h3_reference_sha256":
+            expected_h3_sha256,
+    }
+
+
+    for field, expected_value in (
+        scope_checks.items()
+    ):
+        if (
+            manifest_scope.get(
+                field
+            )
+            != expected_value
+        ):
+            raise ValueError(
+                "Spatial cache manifest "
+                f"scope.{field} does not "
+                "match the cache config."
+            )
+
+
+    expected_cache_relative_path = (
+        Path(
+            cache_config[
+                "root"
+            ]
+        )
+        / cache_config[
+            "snapshot_partition"
+        ]
+        / cache_config[
+            "file_name"
+        ]
+    ).as_posix()
+
+
+    cache_checks = {
+        "path":
+            expected_cache_relative_path,
+
+        "layer":
+            cache_config[
+                "layer"
+            ],
+
+        "driver":
+            cache_config[
+                "driver"
+            ],
+
+        "crs":
+            cache_config[
+                "crs"
+            ],
+    }
+
+
+    for field, expected_value in (
+        cache_checks.items()
+    ):
+        if (
+            manifest_cache.get(
+                field
+            )
+            != expected_value
+        ):
+            raise ValueError(
+                "Spatial cache manifest "
+                f"cache.{field} does not "
+                "match the cache config."
+            )
+
+
+    if (
+        cache_path.stat().st_size
+        != manifest_cache.get(
+            "size_bytes"
+        )
+    ):
+        raise ValueError(
+            "Spatial cache size does not "
+            "match its manifest."
+        )
+
+
+    live_cache_sha256 = sha256_file(
+        cache_path
+    )
+
+
+    if (
+        live_cache_sha256
+        != manifest_cache.get(
+            "sha256"
+        )
+    ):
+        raise ValueError(
+            "Spatial cache SHA-256 does not "
+            "match its manifest."
+        )
+
+
+    return {
+        "config":
+            config,
+
+        "manifest":
+            manifest,
+
+        "source_path":
+            source_path,
+
+        "h3_reference_path":
+            h3_reference_path,
+
+        "cache_path":
+            cache_path,
+
+        "manifest_path":
+            manifest_path,
+
+        "cache_sha256":
+            live_cache_sha256,
+    }
+
+
+
+def validate_spatial_derivation_fidelity(
+    record: dict[str, Any],
+    contract: dict[str, Any],
+) -> dict[str, Any]:
+    derivation_policy = contract[
+        "spatial"
+    ][
+        "derivation_policy"
+    ]
+
+
+    if (
+        derivation_policy.get(
+            "policy"
+        )
+        != (
+            "deterministic_from_"
+            "spatial_reference"
+        )
+    ):
+        raise ValueError(
+            "Unsupported spatial "
+            "derivation policy."
+        )
+
+
+    spatial_method = record.get(
+        "spatial_resolution_method"
+    )
+
+
+    applies_to_methods = (
+        derivation_policy.get(
+            "applies_to_methods",
+            [],
+        )
+    )
+
+
+    if (
+        spatial_method
+        not in applies_to_methods
+    ):
+        return {
+            "applied": False,
+        }
+
+
+    if (
+        spatial_method
+        != "geometry_intersection"
+    ):
+        raise ValueError(
+            "Unsupported deterministic "
+            "spatial derivation method."
+        )
+
+
+    geometry_policy = derivation_policy[
+        "geometry_intersection"
+    ]
+
+
+    spatial_reference = record.get(
+        "spatial_reference"
+    )
+
+
+    if not isinstance(
+        spatial_reference,
+        dict,
+    ):
+        raise ValueError(
+            "geometry_intersection requires "
+            "spatial_reference."
+        )
+
+
+    source = spatial_reference.get(
+        "source"
+    )
+
+    feature_type = spatial_reference.get(
+        "feature_type"
+    )
+
+
+    supported_sources = (
+        geometry_policy[
+            "supported_sources"
+        ]
+    )
+
+
+    if source not in supported_sources:
+        raise ValueError(
+            "Unsupported spatial reference "
+            "source for deterministic "
+            "derivation."
+        )
+
+
+    source_policy = supported_sources[
+        source
+    ]
+
+
+    supported_feature_types = (
+        source_policy[
+            "supported_feature_types"
+        ]
+    )
+
+
+    if (
+        feature_type
+        not in supported_feature_types
+    ):
+        raise ValueError(
+            "Unsupported spatial reference "
+            "feature_type for deterministic "
+            "derivation."
+        )
+
+
+    feature_policy = (
+        supported_feature_types[
+            feature_type
+        ]
+    )
+
+
+    id_field = feature_policy[
+        "id_field"
+    ]
+
+
+    context = (
+        load_verified_spatial_cache_context()
+    )
+
+
+    cache_config = context[
+        "config"
+    ]
+
+    source_config = cache_config[
+        "source"
+    ]
+
+    cache_output_config = cache_config[
+        "cache"
+    ]
+
+
+    provenance_checks = {
+        "source":
+            source_config[
+                "provider"
+            ],
+
+        "snapshot_date":
+            source_config[
+                "snapshot_date"
+            ],
+
+        "source_path":
+            source_config[
+                "path"
+            ],
+
+        "layer":
+            source_config[
+                "layer"
+            ],
+
+        "feature_type":
+            source_config[
+                "feature_type"
+            ],
+
+        "source_crs":
+            source_config[
+                "source_crs"
+            ],
+    }
+
+
+    for field, expected_value in (
+        provenance_checks.items()
+    ):
+        if (
+            spatial_reference.get(
+                field
+            )
+            != expected_value
+        ):
+            raise ValueError(
+                "Gold spatial_reference."
+                f"{field} does not match "
+                "the verified spatial cache "
+                "provenance."
+            )
+
+
+    if (
+        id_field
+        != source_config[
+            "id_field"
+        ]
+    ):
+        raise ValueError(
+            "Gold spatial derivation id field "
+            "does not match the verified "
+            "spatial cache."
+        )
+
+
+    feature_id = spatial_reference.get(
+        "feature_id"
+    )
+
+
+    if (
+        not isinstance(
+            feature_id,
+            str,
+        )
+        or not feature_id.strip()
+    ):
+        raise ValueError(
+            "spatial_reference.feature_id "
+            "must be a non-empty string."
+        )
+
+
+    escaped_feature_id = (
+        feature_id.replace(
+            "'",
+            "''",
+        )
+    )
+
+
+    feature = pyogrio.read_dataframe(
+        context[
+            "cache_path"
+        ],
+        layer=cache_output_config[
+            "layer"
+        ],
+        where=(
+            f"{id_field} = "
+            f"'{escaped_feature_id}'"
+        ),
+    )
+
+
+    if len(feature) != 1:
+        raise ValueError(
+            "Spatial reference feature must "
+            "resolve to exactly one verified "
+            "cache feature."
+        )
+
+
+    row = feature.iloc[0]
+
+
+    if (
+        str(
+            row.get(
+                id_field
+            )
+        )
+        != feature_id
+    ):
+        raise ValueError(
+            "Resolved spatial feature id "
+            "does not match provenance."
+        )
+
+
+    feature_name = row.get(
+        "name"
+    )
+
+
+    if (
+        geometry_policy.get(
+            "require_exact_feature_match"
+        )
+        is True
+        and feature_name
+        != spatial_reference.get(
+            "feature_name"
+        )
+    ):
+        raise ValueError(
+            "Resolved spatial feature name "
+            "does not match "
+            "spatial_reference.feature_name."
+        )
+
+
+    if (
+        geometry_policy.get(
+            "require_resolved_location_name_equals_feature_name"
+        )
+        is True
+        and record.get(
+            "resolved_location_name"
+        )
+        != spatial_reference.get(
+            "feature_name"
+        )
+    ):
+        raise ValueError(
+            "resolved_location_name does not "
+            "match spatial reference "
+            "feature_name."
+        )
+
+
+    if feature.crs is None:
+        raise ValueError(
+            "Resolved spatial feature CRS "
+            "is missing."
+        )
+
+
+    if (
+        geometry_policy.get(
+            "require_source_crs_match"
+        )
+        is True
+        and feature.crs.to_string()
+        != spatial_reference.get(
+            "source_crs"
+        )
+    ):
+        raise ValueError(
+            "Resolved spatial feature CRS "
+            "does not match provenance."
+        )
+
+
+    geometry = row.geometry
+
+
+    if (
+        geometry is None
+        or geometry.is_empty
+        or not geometry.is_valid
+    ):
+        raise ValueError(
+            "Resolved spatial feature "
+            "geometry is invalid."
+        )
+
+
+    h3_assignment = geometry_policy[
+        "h3_assignment"
+    ]
+
+
+    if (
+        h3_assignment.get(
+            "intersection_rule"
+        )
+        != "positive_area"
+    ):
+        raise ValueError(
+            "Unsupported H3 spatial "
+            "intersection rule."
+        )
+
+
+    if (
+        h3_assignment.get(
+            "require_record_h3_in_derived_cells"
+        )
+        is not True
+    ):
+        raise ValueError(
+            "Gold spatial derivation policy "
+            "must require record H3 "
+            "membership."
+        )
+
+
+    h3_index = record.get(
+        "h3_index"
+    )
+
+
+    if (
+        not isinstance(
+            h3_index,
+            str,
+        )
+        or not h3.is_valid_cell(
+            h3_index
+        )
+    ):
+        raise ValueError(
+            "Cannot derive spatial fidelity "
+            "for an invalid h3_index."
+        )
+
+
+    boundary = h3.cell_to_boundary(
+        h3_index
+    )
+
+
+    h3_polygon = Polygon(
+        [
+            (
+                longitude,
+                latitude,
+            )
+            for latitude, longitude
+            in boundary
+        ]
+    )
+
+
+    metric_crs = h3_assignment[
+        "metric_crs"
+    ]
+
+
+    feature_metric = (
+        gpd.GeoSeries(
+            [geometry],
+            crs=feature.crs,
+        )
+        .to_crs(
+            metric_crs
+        )
+        .iloc[0]
+    )
+
+
+    h3_metric = (
+        gpd.GeoSeries(
+            [h3_polygon],
+            crs="EPSG:4326",
+        )
+        .to_crs(
+            metric_crs
+        )
+        .iloc[0]
+    )
+
+
+    intersection_area_m2 = float(
+        feature_metric.intersection(
+            h3_metric
+        ).area
+    )
+
+
+    if intersection_area_m2 <= 0.0:
+        raise ValueError(
+            "Gold h3_index does not have "
+            "positive-area intersection with "
+            "the verified spatial reference "
+            "geometry."
+        )
+
+
+    return {
+        "applied":
+            True,
+
+        "feature_id":
+            feature_id,
+
+        "feature_name":
+            feature_name,
+
+        "h3_index":
+            h3_index,
+
+        "intersection_area_m2":
+            intersection_area_m2,
+    }
+
 
 
 def validate_nonempty_string(
@@ -1256,6 +2195,15 @@ def validate_gold_record(
         raise ValueError(
             "scope_status must be in_scope."
         )
+
+
+    spatial_derivation_result = (
+        validate_spatial_derivation_fidelity(
+            record,
+            contract,
+        )
+    )
+
 
     measurement_fields = [
         "flood_depth_m",

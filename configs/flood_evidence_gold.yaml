@@ -250,6 +250,46 @@ spatial:
         required: true
         type: "string"
 
+  derivation_policy:
+    policy:
+      "deterministic_from_spatial_reference"
+
+    applies_to_methods:
+      - "geometry_intersection"
+
+    geometry_intersection:
+      require_source_path_exists:
+        true
+
+      require_exact_feature_match:
+        true
+
+      require_source_crs_match:
+        true
+
+      require_resolved_location_name_equals_feature_name:
+        true
+
+      supported_sources:
+        OpenStreetMap:
+          supported_feature_types:
+            way:
+              id_field:
+                "osm_way_id"
+
+      h3_assignment:
+        use_scope_h3_reference:
+          true
+
+        intersection_rule:
+          "positive_area"
+
+        metric_crs:
+          "EPSG:3405"
+
+        require_record_h3_in_derived_cells:
+          true
+
   scope_status:
     required: true
     type: "string"

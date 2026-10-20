@@ -1,0 +1,47 @@
+version: '1.0'
+cache_name: hanoi_core_osm_way_multipolygons
+purpose: deterministic_spatial_reference_lookup
+source:
+  provider: OpenStreetMap
+  format: osm_pbf
+  snapshot_date: '2026-10-12'
+  path: data/bronze/urban_vector/osm/raw/snapshot_date=2026-10-12/vietnam-20261012.osm.pbf
+  layer: multipolygons
+  feature_type: way
+  id_field: osm_way_id
+  source_crs: EPSG:4326
+  expected_sha256: D954E09B891079520BF13799377A9CF783CB1D9FE2745EF11864CB8D2A5B2048
+scope:
+  source: h3_reference
+  h3_reference_path: data/reference/hanoi_core_h3_res9.geojson
+  h3_id_field: h3_id
+  h3_resolution: 9
+  spatial_filter: total_bounds
+  expected_sha256: 01D92C55D76CC9370EC55F94DB2F549D8F74A23B527340C7F6A24054568EDBB5
+cache:
+  root: data/silver/spatial_reference/osm
+  snapshot_partition: snapshot_date=2026-10-12
+  file_name: hanoi_core_osm_way_multipolygons.gpkg
+  layer: osm_way_multipolygons
+  driver: GPKG
+  crs: EPSG:4326
+  retained_fields:
+  - osm_id
+  - osm_way_id
+  - name
+  - amenity
+  - building
+  require_unique_feature_id: true
+lineage:
+  hash_algorithm: sha256
+  manifest_file_name: manifest.json
+  required_inputs:
+  - source_pbf
+  - h3_reference
+  require_live_hash_verification: true
+validation:
+  require_source_snapshot_match: true
+  require_source_path_match: true
+  require_source_crs_match: true
+  require_exact_feature_match: true
+  require_feature_name_match: true
